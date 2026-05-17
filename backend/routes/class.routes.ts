@@ -1,14 +1,18 @@
 import express from 'express';
-import { createClass, getClasses, getClassById, enrollStudent } from '../controllers/class.controller';
-import { protect, authorize } from '../middleware/auth';
+import { uploadTimetable, getMyClasses } from '../controllers/class.controller';
+import { protect } from '../middleware/auth';
+import multer from 'multer';
 
 const router = express.Router();
 
-router.use(protect); // All class routes require authentication
+// Configure multer for memory storage
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
 
-router.post('/', authorize('admin', 'teacher'), createClass);
-router.get('/', getClasses);
-router.get('/:id', getClassById);
-router.post('/enroll', authorize('student'), enrollStudent);
+router.post('/upload-timetable', protect, upload.single('timetable'), uploadTimetable as any);
+router.get('/me', protect, getMyClasses as any);
 
 export default router;

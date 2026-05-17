@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { QrCode, Users, Calendar, Clock } from 'lucide-react';
+import Link from 'next/link';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
@@ -31,10 +32,10 @@ export default function DashboardPage() {
           <p className="text-muted-foreground mt-1">Here is what's happening today.</p>
         </div>
         {role === 'teacher' && (
-          <button className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
+          <Link href="/dashboard/session" className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium flex items-center gap-2 hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
             <QrCode className="w-4 h-4" />
             Generate Session QR
-          </button>
+          </Link>
         )}
       </div>
 

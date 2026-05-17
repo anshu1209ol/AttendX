@@ -71,10 +71,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           )}
           {role === 'teacher' && (
-            <Link href="/dashboard/classes" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
-              <Home className="w-5 h-5" />
-              My Classes
-            </Link>
+            <>
+              <Link href="/dashboard/classes" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+                <Home className="w-5 h-5" />
+                My Classes
+              </Link>
+              <Link href="/dashboard/session" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+                <QrCode className="w-5 h-5" />
+                Session QR
+              </Link>
+            </>
+          )}
+          {role === 'student' && (
+            <>
+              <Link href="/dashboard/classes" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+                <Home className="w-5 h-5" />
+                My Classes
+              </Link>
+              <Link href="/dashboard/scan" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+                <QrCode className="w-5 h-5" />
+                Scan QR
+              </Link>
+            </>
           )}
         </nav>
 
