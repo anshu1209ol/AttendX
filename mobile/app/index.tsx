@@ -1,75 +1,102 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { Camera, CameraView } from 'expo-camera';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { LogOut } from 'lucide-react-native';
+import StudentApp from './student/index';
+import TeacherApp from './teacher/index';
+import { QrCode, Shield, Users } from 'lucide-react-native';
 
-export default function ScannerScreen() {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [scanned, setScanned] = useState(false);
+export default function RoleDispatcher() {
+  const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<'student' | 'teacher' | null>(null);
+  const [demoOverride, setDemoOverride] = useState<'student' | 'teacher' | null>(null);
 
   useEffect(() => {
-    const getCameraPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
+    const fetchUserRole = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          // Retrieve role from user metadata
+          const userRole = session.user.user_metadata?.role || 'student';
+          setRole(userRole);
+        } else {
+          // Fallback to student for demo safety
+          setRole('student');
+        }
+      } catch (err) {
+        setRole('student');
+      } finally {
+        setLoading(false);
+      }
     };
 
-    getCameraPermissions();
+    fetchUserRole();
   }, []);
 
-  const handleBarCodeScanned = ({ type, data }: any) => {
-    setScanned(true);
-    Alert.alert("QR Code Scanned", `Data: ${data}`, [
-      { text: "OK", onPress: () => setScanned(false) }
-    ]);
-    // TODO: Send data to backend to mark attendance
-  };
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text style={styles.loadingText}>Initializing AttendX Portals...</Text>
+      </View>
+    );
+  }
 
-  const handleLogout = () => {
-    supabase.auth.signOut();
-  };
-
-  if (hasPermission === null) return <View style={styles.container}><Text style={styles.text}>Requesting camera permission...</Text></View>;
-  if (hasPermission === false) return <View style={styles.container}><Text style={styles.text}>No access to camera</Text></View>;
+  // Render the selected view (use demoOverride if present, else database role)
+  const currentRole = demoOverride || role || 'student';
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Scan QR</Text>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <LogOut color="#FFF" size={20} />
+      {/* FLOATING DEVELOPER DEMO ROLE SWITCHER (Stripe Inspired UX) */}
+      <View style={styles.demoBanner}>
+        <Text style={styles.demoText}>Demo Control: </Text>
+        <TouchableOpacity 
+          style={[styles.demoBtn, currentRole === 'student' ? styles.demoBtnActive : styles.demoBtnInactive]}
+          onPress={() => setDemoOverride('student')}
+        >
+          <Users size={12} color={currentRole === 'student' ? '#FFF' : '#666'} style={{ marginRight: 4 }} />
+          <Text style={[styles.demoBtnText, currentRole === 'student' ? styles.textActive : styles.textInactive]}>
+            Student View
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.demoBtn, currentRole === 'teacher' ? styles.demoBtnActive : styles.demoBtnInactive]}
+          onPress={() => setDemoOverride('teacher')}
+        >
+          <Shield size={12} color={currentRole === 'teacher' ? '#FFF' : '#666'} style={{ marginRight: 4 }} />
+          <Text style={[styles.demoBtnText, currentRole === 'teacher' ? styles.textActive : styles.textInactive]}>
+            Teacher View
+          </Text>
         </TouchableOpacity>
       </View>
-      
-      <View style={styles.cameraContainer}>
-        <CameraView
-          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-          barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        {scanned && (
-          <TouchableOpacity style={styles.scanAgain} onPress={() => setScanned(false)}>
-            <Text style={styles.scanAgainText}>Tap to Scan Again</Text>
-          </TouchableOpacity>
-        )}
-        {/* Viewfinder Frame */}
-        <View style={styles.overlay}>
-          <View style={styles.frame} />
-        </View>
-      </View>
+
+      {/* Render Subsystem App */}
+      {currentRole === 'teacher' ? <TeacherApp /> : <StudentApp />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B0B0E' },
-  text: { color: '#FFF', textAlign: 'center', marginTop: 50 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60, paddingBottom: 20, backgroundColor: '#1A1A24' },
-  title: { color: '#FFF', fontSize: 24, fontWeight: 'bold' },
-  logoutBtn: { padding: 10, backgroundColor: '#EF4444', borderRadius: 8 },
-  cameraContainer: { flex: 1, position: 'relative' },
-  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
-  frame: { width: 250, height: 250, borderWidth: 2, borderColor: '#3B82F6', borderRadius: 20 },
-  scanAgain: { position: 'absolute', bottom: 50, alignSelf: 'center', backgroundColor: '#3B82F6', padding: 15, borderRadius: 10, zIndex: 10 },
-  scanAgainText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0B0B0E' },
+  loadingText: { color: '#9CA3AF', marginTop: 15, fontSize: 14, fontWeight: '500' },
+  
+  // Demo switch styles
+  demoBanner: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    backgroundColor: '#161622', 
+    paddingVertical: 8, 
+    borderBottomWidth: 1, 
+    borderColor: '#222235',
+    paddingTop: 45, // clear notch bounds
+    zIndex: 1000
+  },
+  demoText: { color: '#666', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  demoBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 15, marginHorizontal: 5, borderWidth: 1 },
+  demoBtnActive: { backgroundColor: '#3B82F6', borderColor: '#3B82F6' },
+  demoBtnInactive: { backgroundColor: '#1E1E2D', borderColor: '#2A2A3A' },
+  demoBtnText: { fontSize: 11, fontWeight: 'bold' },
+  textActive: { color: '#FFF' },
+  textInactive: { color: '#666' }
 });

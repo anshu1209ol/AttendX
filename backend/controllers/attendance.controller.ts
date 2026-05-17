@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import Session from '../models/Session';
 import Attendance from '../models/Attendance';
 import Class from '../models/Class';
+import User from '../models/User';
 import { AuthRequest } from '../middleware/auth';
 import crypto from 'crypto';
 
@@ -48,9 +49,40 @@ export const markAttendance = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'QR Code has expired or is invalid' });
     }
 
-    // Geofencing Logic here if needed
-    // Calculate distance between session.location and request location...
-    
+    // Advanced Geofencing Verification (GPS Validation)
+    let distance = 0;
+    if (session.location && session.location.latitude && session.location.longitude) {
+      if (!location || !location.latitude || !location.longitude) {
+        return res.status(400).json({ success: false, message: 'GPS coordinate verification is required' });
+      }
+
+      const lat1 = session.location.latitude;
+      const lon1 = session.location.longitude;
+      const lat2 = location.latitude;
+      const lon2 = location.longitude;
+
+      const R = 6371000; // Earth's radius in meters
+      const phi1 = lat1 * Math.PI / 180;
+      const phi2 = lat2 * Math.PI / 180;
+      const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+      const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                Math.cos(phi1) * Math.cos(phi2) *
+                Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      distance = R * c;
+
+      const maxRadius = session.location.radius || 50; // default 50 meters
+      if (distance > maxRadius) {
+        return res.status(400).json({
+          success: false,
+          message: `GPS check failed: You are ${Math.round(distance)} meters from the classroom. Allowed radius: ${maxRadius}m.`,
+          distance: Math.round(distance)
+        });
+      }
+    }
+
     const classInfo = await Class.findById(session.classId);
     if (!classInfo?.students.includes(studentId)) {
       return res.status(403).json({ success: false, message: 'You are not enrolled in this class' });
@@ -69,7 +101,30 @@ export const markAttendance = async (req: AuthRequest, res: Response) => {
       deviceInfo,
     });
 
-    res.status(201).json({ success: true, data: attendance });
+    // Fetch user details for real-time live notification
+    const studentUser = await User.findById(studentId);
+
+    // Emit live scan event to teacher's dashboard
+    const io = req.app.get('io');
+    if (io) {
+      io.emit(`attendance:marked:${sessionId}`, {
+        studentId: studentId,
+        name: studentUser?.name || 'Anonymous Student',
+        email: studentUser?.email || 'N/A',
+        studentIdStr: studentUser?.studentId || 'N/A',
+        scannedAt: new Date(),
+        status: 'present',
+        distance: Math.round(distance),
+        deviceInfo: deviceInfo || 'N/A'
+      });
+    }
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Attendance marked successfully', 
+      data: attendance,
+      distance: Math.round(distance)
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
