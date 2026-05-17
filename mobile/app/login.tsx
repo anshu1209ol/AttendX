@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { QrCode, Shield, Users, Mail, Lock } from 'lucide-react-native';
+import { QrCode, Mail, Lock } from 'lucide-react-native';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -9,11 +9,8 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = async (customEmail?: string, customPassword?: string) => {
-    const loginEmail = customEmail || email;
-    const loginPassword = customPassword || password;
-
-    if (!loginEmail || !loginPassword) {
+  const handleLogin = async () => {
+    if (!email || !password) {
       setError('Please enter your email and password');
       return;
     }
@@ -22,26 +19,14 @@ export default function LoginScreen() {
     setError('');
     
     const { error } = await supabase.auth.signInWithPassword({ 
-      email: loginEmail, 
-      password: loginPassword 
+      email: email, 
+      password: password 
     });
     
     if (error) {
       setError(error.message);
     }
     setLoading(false);
-  };
-
-  const handleQuickLogin = (role: 'student' | 'teacher') => {
-    if (role === 'student') {
-      setEmail('student@attendx.edu');
-      setPassword('student123');
-      handleLogin('student@attendx.edu', 'student123');
-    } else {
-      setEmail('teacher@attendx.edu');
-      setPassword('teacher123');
-      handleLogin('teacher@attendx.edu', 'teacher123');
-    }
   };
 
   return (
@@ -94,22 +79,6 @@ export default function LoginScreen() {
           {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.buttonText}>Sign In</Text>}
         </TouchableOpacity>
       </View>
-
-      {/* DEVELOPER QUICK LOGIN ACTIONS */}
-      <View style={styles.demoSection}>
-        <Text style={styles.demoTitle}>Developer Quick Actions</Text>
-        <View style={styles.demoButtonsContainer}>
-          <TouchableOpacity style={styles.demoBtn} onPress={() => handleQuickLogin('student')}>
-            <Users size={16} color="#3B82F6" style={{ marginRight: 6 }} />
-            <Text style={styles.demoBtnText}>Student Login</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.demoBtn} onPress={() => handleQuickLogin('teacher')}>
-            <Shield size={16} color="#10B981" style={{ marginRight: 6 }} />
-            <Text style={styles.demoBtnText}>Teacher Login</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.demoFooter}>Quick testing credentials bypasses manually typing roles.</Text>
-      </View>
     </View>
   );
 }
@@ -135,13 +104,5 @@ const styles = StyleSheet.create({
   buttonText: { color: '#FFF', fontSize: 15, fontWeight: 'bold' },
   
   errorWrapper: { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.2)', borderRadius: 10, padding: 12, marginBottom: 20 },
-  error: { color: '#EF4444', fontSize: 13, textAlign: 'center', fontWeight: '500' },
-
-  // Demo buttons style
-  demoSection: { marginTop: 35, alignItems: 'center' },
-  demoTitle: { fontSize: 12, fontWeight: '700', color: '#666', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
-  demoButtonsContainer: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
-  demoBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#161622', height: 45, borderRadius: 10, marginHorizontal: 5, borderWidth: 1, borderColor: '#222235' },
-  demoBtnText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
-  demoFooter: { color: '#444', fontSize: 11, marginTop: 10, textAlign: 'center' }
+  error: { color: '#EF4444', fontSize: 13, textAlign: 'center', fontWeight: '500' }
 });
