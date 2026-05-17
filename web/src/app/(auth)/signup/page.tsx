@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import Interactive3DBackground from '@/components/Interactive3DBackground';
 
 export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -56,9 +57,8 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background bg-grid flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute top-[20%] right-[20%] w-[30%] h-[30%] rounded-full bg-primary/20 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[20%] left-[20%] w-[30%] h-[30%] rounded-full bg-accent/20 blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-transparent flex items-center justify-center p-4 relative overflow-hidden">
+      <Interactive3DBackground />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}

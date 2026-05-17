@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { LogOut, Home, Users, QrCode, Settings, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import Interactive3DBackground from '@/components/Interactive3DBackground';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
@@ -65,7 +66,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className="min-h-screen bg-background bg-grid flex text-foreground">
+    <div className="min-h-screen bg-transparent flex text-foreground relative overflow-hidden">
+      <Interactive3DBackground />
       {/* Sidebar */}
       <aside className="w-64 glass border-r border-border/50 flex flex-col relative z-20">
         <div className="p-6 flex items-center gap-3">

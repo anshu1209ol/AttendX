@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { ArrowRight, QrCode, MapPin, BarChart3, ShieldCheck, Zap } from 'lucide-react';
 import Link from 'next/link';
+import Interactive3DBackground from '@/components/Interactive3DBackground';
 
 export default function LandingPage() {
   const containerVariants = {
@@ -25,10 +26,8 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground bg-grid relative overflow-hidden">
-      {/* Abstract Orbs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-accent/20 blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-transparent text-foreground relative overflow-hidden">
+      <Interactive3DBackground />
 
       {/* Navbar */}
       <nav className="glass fixed top-0 w-full z-50 border-b border-border/50">
