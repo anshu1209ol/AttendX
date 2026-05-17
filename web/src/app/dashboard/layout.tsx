@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import { LogOut, Home, Users, QrCode, Settings, LayoutDashboard } from 'lucide-react';
@@ -12,6 +12,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     const checkUser = async () => {
@@ -39,7 +40,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }} className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+        <motion.div 
+          animate={{ rotate: 360 }} 
+          transition={{ repeat: Infinity, duration: 1, ease: "linear" }} 
+          className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full" 
+        />
       </div>
     );
   }
@@ -47,6 +52,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!user) return null;
 
   const role = user.user_metadata?.role || 'student';
+
+  const isActive = (href: string) => pathname === href;
+
+  const getLinkStyle = (href: string) => {
+    const active = isActive(href);
+    return `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${
+      active 
+        ? 'bg-primary/10 text-primary font-bold shadow-sm shadow-primary/5 border-l-2 border-primary pl-2.5' 
+        : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground hover:translate-x-0.5'
+    }`;
+  };
 
   return (
     <div className="min-h-screen bg-background bg-grid flex text-foreground">
@@ -60,35 +76,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
         
         <nav className="flex-1 px-4 space-y-2 mt-4">
-          <Link href="/dashboard" className="flex items-center gap-3 px-3 py-2 rounded-md bg-primary/10 text-primary font-medium">
+          <Link href="/dashboard" className={getLinkStyle('/dashboard')}>
             <LayoutDashboard className="w-5 h-5" />
             Dashboard
           </Link>
+          
           {role === 'admin' && (
-            <Link href="/dashboard/users" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+            <Link href="/dashboard/users" className={getLinkStyle('/dashboard/users')}>
               <Users className="w-5 h-5" />
               Manage Users
             </Link>
           )}
+          
           {role === 'teacher' && (
             <>
-              <Link href="/dashboard/classes" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+              <Link href="/dashboard/classes" className={getLinkStyle('/dashboard/classes')}>
                 <Home className="w-5 h-5" />
                 My Classes
               </Link>
-              <Link href="/dashboard/session" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+              <Link href="/dashboard/session" className={getLinkStyle('/dashboard/session')}>
                 <QrCode className="w-5 h-5" />
                 Session QR
               </Link>
             </>
           )}
+          
           {role === 'student' && (
             <>
-              <Link href="/dashboard/classes" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+              <Link href="/dashboard/classes" className={getLinkStyle('/dashboard/classes')}>
                 <Home className="w-5 h-5" />
                 My Classes
               </Link>
-              <Link href="/dashboard/scan" className="flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+              <Link href="/dashboard/scan" className={getLinkStyle('/dashboard/scan')}>
                 <QrCode className="w-5 h-5" />
                 Scan QR
               </Link>
