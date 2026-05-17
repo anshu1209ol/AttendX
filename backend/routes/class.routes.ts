@@ -1,5 +1,5 @@
 import express from 'express';
-import { uploadTimetable, getMyClasses } from '../controllers/class.controller';
+import { uploadTimetable, getMyClasses, createClass } from '../controllers/class.controller';
 import { protect } from '../middleware/auth';
 import multer from 'multer';
 
@@ -14,5 +14,6 @@ const upload = multer({
 
 router.post('/upload-timetable', protect, upload.single('timetable'), uploadTimetable as any);
 router.get('/me', protect, getMyClasses as any);
+router.post('/', protect, createClass as any);
 
 export default router;

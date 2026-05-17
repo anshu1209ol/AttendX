@@ -145,3 +145,35 @@ export const getMyClasses = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const createClass = async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, code, description, day, time, room } = req.body;
+    const userId = req.user.id;
+    const role = req.user.role || 'student';
+
+    if (!name || !code) {
+      return res.status(400).json({ success: false, message: 'Class name and code are required' });
+    }
+
+    // Generate unique code suffix to prevent collision if already exists
+    const finalCode = `${code}-${day || 'Day'}-${(time || 'Time').replace(/\s/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const newClass = await Class.create({
+      name,
+      code: finalCode,
+      description: description || `Manually created class`,
+      teacher: role === 'teacher' ? userId : new mongoose.Types.ObjectId(), // Dummy teacher if student creates it
+      day: day || 'Monday',
+      time: time || '10:00 - 11:00',
+      room: room || 'TBA',
+      students: role === 'student' ? [userId] : [] // Auto enroll if student
+    });
+
+    res.status(201).json({ success: true, data: newClass });
+  } catch (error: any) {
+    console.error('Error creating class:', error);
+    res.status(500).json({ success: false, message: error.message || 'Error creating class' });
+  }
+};
+
