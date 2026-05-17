@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -13,6 +13,7 @@ import {
   Switch
 } from 'react-native';
 import { Camera, CameraView } from 'expo-camera';
+import * as Location from 'expo-location';
 import { supabase } from '../../lib/supabase';
 import { 
   LayoutDashboard, 
@@ -26,11 +27,12 @@ import {
   Sun,
   Moon,
   Search,
-  SlidersHorizontal,
   MapPin,
   CheckCircle2,
   XCircle,
-  Edit2
+  Edit2,
+  Navigation,
+  Wifi
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -103,16 +105,58 @@ export default function StudentApp() {
   // Camera Scanner State
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
-  const [scanResult, setScanResult] = useState<{ success: boolean; message: string; distance?: number } | null>(null);
-  const [locationMode, setLocationMode] = useState<'inside' | 'outside'>('inside');
+  const [scanResult, setScanResult] = useState<{ success: boolean; message: string; distance?: number; studentInfo?: typeof studentInfo } | null>(null);
 
-  // Initialize camera permissions
+  // Real GPS Location State
+  const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const locationWatchRef = useRef<Location.LocationSubscription | null>(null);
+
+  // Classroom GPS reference (set by teacher when starting session)
+  const CLASSROOM_LAT = 28.6139;
+  const CLASSROOM_LNG = 77.2090;
+  const GEOFENCE_RADIUS_M = 50; // metres
+
+  // Haversine distance calculator (metres)
+  const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  // Initialize camera + location permissions
   useEffect(() => {
     const getPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
+      const { status: camStatus } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(camStatus === 'granted');
+
+      const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(locStatus === 'granted');
+
+      if (locStatus === 'granted') {
+        // Start continuous real-time location watch
+        locationWatchRef.current = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 2 },
+          (loc) => {
+            setCurrentLocation({
+              lat: loc.coords.latitude,
+              lng: loc.coords.longitude,
+              accuracy: Math.round(loc.coords.accuracy ?? 99)
+            });
+          }
+        );
+      }
     };
     getPermissions();
+
+    return () => {
+      locationWatchRef.current?.remove();
+    };
   }, []);
 
   // Attendance Calculator Variables
@@ -133,68 +177,90 @@ export default function StudentApp() {
     return 'Critical (Debarment Threat)';
   };
 
-  // QR Scanning Simulation Handler
+  // QR Scanning Handler — uses REAL device GPS on every scan
   const handleBarCodeScanned = async ({ type, data }: any) => {
+    if (scanned) return;
     setScanned(true);
     setLoading(true);
 
-    // Simulate GPS calculation & geofence checks
-    setTimeout(() => {
-      setLoading(false);
-      
-      let lat = 28.6139;
-      let lng = 77.2090;
-      let targetLat = 28.61395;
-      let targetLng = 77.20905;
-      let simulatedDistance = locationMode === 'inside' ? 8 : 124; // inside or outside radius
-
-      if (locationMode === 'outside') {
+    try {
+      // ── Step 1: Fetch a fresh GPS fix right now ──
+      if (locationPermission !== true) {
+        setLoading(false);
         setScanResult({
           success: false,
-          message: `GPS check failed: You are ${simulatedDistance}m from the classroom. Authorized check-in range is 50m.`,
-          distance: simulatedDistance
+          message: 'Location permission denied. Please enable location access in your device settings to mark attendance.',
+          studentInfo: studentInfo
         });
-        
-        // Push alert notification
-        setNotifications(prev => [
-          `Failed check-in: Geo-location blocked. (${new Date().toLocaleTimeString()})`,
-          ...prev
-        ]);
-      } else {
-        // Success
-        const matchedSubject = subjects[0]; // mock match
-        
-        // Add to history
-        const newLog: AttendanceLog = {
-          id: String(Date.now()),
-          subjectName: matchedSubject.name,
-          subjectCode: matchedSubject.code,
-          date: 'Today',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: 'present',
-          distance: simulatedDistance
-        };
-        
-        setHistory(prev => [newLog, ...prev]);
-        
-        // Increment subject count
-        setSubjects(prev => prev.map(sub => 
-          sub.id === matchedSubject.id ? { ...sub, attended: sub.attended + 1, total: sub.total + 1 } : sub
-        ));
-
-        setScanResult({
-          success: true,
-          message: `Attendance marked successfully for ${matchedSubject.name}!`,
-          distance: simulatedDistance
-        });
-
-        // Push success notification
-        setNotifications(prev => [
-          `Checked in: DBMS class marked present. (${new Date().toLocaleTimeString()})`,
-          ...prev
-        ]);
+        return;
       }
-    }, 2000);
+
+      setLocationLoading(true);
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+      setLocationLoading(false);
+
+      const userLat = loc.coords.latitude;
+      const userLng = loc.coords.longitude;
+      const accuracy = Math.round(loc.coords.accuracy ?? 99);
+      const distanceM = Math.round(haversineDistance(userLat, userLng, CLASSROOM_LAT, CLASSROOM_LNG));
+
+      // Update live location display
+      setCurrentLocation({ lat: userLat, lng: userLng, accuracy });
+
+      // ── Step 2: Geofence check ──
+      if (distanceM > GEOFENCE_RADIUS_M) {
+        setLoading(false);
+        setScanResult({
+          success: false,
+          message: `GPS Geofence Failed: You are ${distanceM}m away from the classroom. Authorised check-in radius is ${GEOFENCE_RADIUS_M}m. Move closer and try again.`,
+          distance: distanceM,
+          studentInfo: studentInfo
+        });
+        setNotifications(prev => [
+          `❌ Failed: ${distanceM}m from classroom — geo-blocked. (${new Date().toLocaleTimeString()})`,
+          ...prev
+        ]);
+        return;
+      }
+
+      // ── Step 3: Attendance marked ──
+      const matchedSubject = subjects[0];
+      const newLog: AttendanceLog = {
+        id: String(Date.now()),
+        subjectName: matchedSubject.name,
+        subjectCode: matchedSubject.code,
+        date: 'Today',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'present',
+        distance: distanceM
+      };
+      setHistory(prev => [newLog, ...prev]);
+      setSubjects(prev => prev.map(sub =>
+        sub.id === matchedSubject.id ? { ...sub, attended: sub.attended + 1, total: sub.total + 1 } : sub
+      ));
+
+      setLoading(false);
+      setScanResult({
+        success: true,
+        message: `Attendance verified for ${matchedSubject.name}!`,
+        distance: distanceM,
+        studentInfo: studentInfo
+      });
+      setNotifications(prev => [
+        `✅ Checked in: ${matchedSubject.code} — ${distanceM}m from room. (${new Date().toLocaleTimeString()})`,
+        ...prev
+      ]);
+    } catch (err: any) {
+      setLoading(false);
+      setLocationLoading(false);
+      setScanResult({
+        success: false,
+        message: `Location error: ${err.message ?? 'Could not fetch GPS coordinates. Please try again.'}`,
+        studentInfo: studentInfo
+      });
+    }
   };
 
   const resetScanner = () => {
@@ -358,51 +424,123 @@ export default function StudentApp() {
         {/* ================================================== */}
         {activeTab === 'scan' && (
           <View style={styles.scannerWrapper}>
-            {/* GPS GEOFENCE CONFIGURATOR */}
-            <View style={[styles.geofenceConfigCard, darkMode ? styles.darkCard : styles.lightCard]}>
-              <View style={styles.geoHeader}>
-                <MapPin color="#3B82F6" size={20} />
-                <Text style={[styles.geoTitle, darkMode ? styles.textDarkPrimary : styles.textLightPrimary]}>GPS Geofence Simulator</Text>
-              </View>
-              <Text style={[styles.geoDesc, darkMode ? styles.textDarkSecondary : styles.textLightSecondary]}>
-                Simulate checking check-in coordinates inside vs outside of the classroom range.
-              </Text>
-              <View style={styles.locationSelector}>
-                <TouchableOpacity 
-                  style={[styles.locationBtn, locationMode === 'inside' ? styles.locBtnActive : styles.locBtnInactive]}
-                  onPress={() => setLocationMode('inside')}
-                >
-                  <Text style={locationMode === 'inside' ? styles.locBtnTextActive : styles.locBtnTextInactive}>Inside Classroom (Radius &lt; 50m)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.locationBtn, locationMode === 'outside' ? styles.locBtnActiveRed : styles.locBtnInactive]}
-                  onPress={() => setLocationMode('outside')}
-                >
-                  <Text style={locationMode === 'outside' ? styles.locBtnTextActive : styles.locBtnTextInactive}>Outside Campus (Radius &gt; 100m)</Text>
-                </TouchableOpacity>
+
+            {/* ── STUDENT IDENTITY CARD ── */}
+            <View style={[styles.studentIdentityCard, darkMode ? styles.darkCard : styles.lightCard]}>
+              <View style={styles.identityRow}>
+                <View style={styles.identityAvatar}>
+                  <Text style={styles.identityAvatarText}>
+                    {studentInfo.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[styles.identityName, darkMode ? styles.textDarkPrimary : styles.textLightPrimary]}>
+                    {studentInfo.name}
+                  </Text>
+                  <Text style={styles.identityRoll}>{studentInfo.rollNumber}</Text>
+                  <Text style={styles.identityCourse}>{studentInfo.course} • {studentInfo.semester}</Text>
+                </View>
+                <View style={styles.identityBadge}>
+                  <ShieldCheck color="#10B981" size={16} />
+                </View>
               </View>
             </View>
 
-            {/* SCANNER CONTAINER */}
+            {/* ── REAL-TIME GPS STATUS ── */}
+            <View style={[styles.gpsStatusCard, darkMode ? styles.darkCard : styles.lightCard]}>
+              <View style={styles.geoHeader}>
+                <Navigation color={locationPermission ? '#10B981' : '#F59E0B'} size={18} />
+                <Text style={[styles.geoTitle, darkMode ? styles.textDarkPrimary : styles.textLightPrimary]}>
+                  Real-Time GPS Location
+                </Text>
+                <View style={[styles.gpsPill, { backgroundColor: locationPermission ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)' }]}>
+                  <View style={[styles.gpsDot, { backgroundColor: locationPermission ? '#10B981' : '#F59E0B' }]} />
+                  <Text style={[styles.gpsPillText, { color: locationPermission ? '#10B981' : '#F59E0B' }]}>
+                    {locationPermission ? 'LIVE' : 'NO PERM'}
+                  </Text>
+                </View>
+              </View>
+
+              {currentLocation ? (
+                <View style={styles.coordsRow}>
+                  <View style={styles.coordBlock}>
+                    <Text style={styles.coordLabel}>Latitude</Text>
+                    <Text style={[styles.coordValue, darkMode ? styles.textDarkPrimary : styles.textLightPrimary]}>
+                      {currentLocation.lat.toFixed(6)}
+                    </Text>
+                  </View>
+                  <View style={styles.coordBlock}>
+                    <Text style={styles.coordLabel}>Longitude</Text>
+                    <Text style={[styles.coordValue, darkMode ? styles.textDarkPrimary : styles.textLightPrimary]}>
+                      {currentLocation.lng.toFixed(6)}
+                    </Text>
+                  </View>
+                  <View style={styles.coordBlock}>
+                    <Text style={styles.coordLabel}>Accuracy</Text>
+                    <Text style={[styles.coordValue, { color: currentLocation.accuracy <= 20 ? '#10B981' : '#F59E0B' }]}>
+                      ±{currentLocation.accuracy}m
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.gpsWaiting}>
+                  <ActivityIndicator color="#3B82F6" size="small" style={{ marginRight: 8 }} />
+                  <Text style={[styles.geoDesc, darkMode ? styles.textDarkSecondary : styles.textLightSecondary]}>
+                    {locationPermission === false
+                      ? 'Location permission denied — enable it in Settings'
+                      : 'Acquiring GPS signal...'}
+                  </Text>
+                </View>
+              )}
+
+              <Text style={[styles.geofenceNote, darkMode ? styles.textDarkSecondary : styles.textLightSecondary]}>
+                📍 Geofence radius: {GEOFENCE_RADIUS_M}m · Location verified fresh on every scan
+              </Text>
+            </View>
+
+            {/* ── SCANNER CAMERA ── */}
             <View style={[styles.cameraViewFrame, { borderColor: darkMode ? '#222235' : '#E2E8F0' }]}>
               {scanResult ? (
                 <View style={[styles.scanFeedbackFrame, darkMode ? styles.darkCard : styles.lightCard]}>
+
+                  {/* Student info in result */}
+                  {scanResult.studentInfo && (
+                    <View style={styles.resultStudentRow}>
+                      <View style={styles.resultAvatar}>
+                        <Text style={styles.resultAvatarText}>
+                          {scanResult.studentInfo.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={[styles.resultStudentName, darkMode ? styles.textDarkPrimary : styles.textLightPrimary]}>
+                          {scanResult.studentInfo.name}
+                        </Text>
+                        <Text style={styles.resultStudentRoll}>{scanResult.studentInfo.rollNumber}</Text>
+                      </View>
+                    </View>
+                  )}
+
                   {scanResult.success ? (
-                    <CheckCircle2 color="#10B981" size={72} style={{ marginBottom: 20 }} />
+                    <CheckCircle2 color="#10B981" size={64} style={{ marginBottom: 16 }} />
                   ) : (
-                    <XCircle color="#EF4444" size={72} style={{ marginBottom: 20 }} />
+                    <XCircle color="#EF4444" size={64} style={{ marginBottom: 16 }} />
                   )}
                   <Text style={[styles.feedbackTitle, { color: scanResult.success ? '#10B981' : '#EF4444' }]}>
-                    {scanResult.success ? 'Location Verified!' : 'Verification Failed'}
+                    {scanResult.success ? '✅ Attendance Marked!' : '❌ Verification Failed'}
                   </Text>
                   <Text style={[styles.feedbackDesc, darkMode ? styles.textDarkSecondary : styles.textLightSecondary]}>
                     {scanResult.message}
                   </Text>
-                  <Text style={styles.distanceMetric}>
-                    Classroom Distance: {scanResult.distance} meters
-                  </Text>
+                  {scanResult.distance !== undefined && (
+                    <View style={styles.distancePill}>
+                      <MapPin color="#3B82F6" size={14} />
+                      <Text style={styles.distancePillText}>
+                        {scanResult.distance}m from classroom
+                      </Text>
+                    </View>
+                  )}
                   <TouchableOpacity style={styles.actionBtn} onPress={resetScanner}>
-                    <Text style={styles.actionBtnText}>Mark Another Class</Text>
+                    <Text style={styles.actionBtnText}>Scan Another Class</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -412,22 +550,24 @@ export default function StudentApp() {
                   {hasPermission === true && (
                     <CameraView
                       onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-                      barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                      barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
                       style={StyleSheet.absoluteFillObject}
                     />
                   )}
-                  
-                  {loading && (
+
+                  {(loading || locationLoading) && (
                     <View style={styles.scannerOverlayLoading}>
                       <ActivityIndicator color="#FFF" size="large" />
-                      <Text style={styles.scannerOverlayLoadingText}>Checking Location Verification...</Text>
+                      <Text style={styles.scannerOverlayLoadingText}>
+                        {locationLoading ? 'Fetching GPS coordinates...' : 'Verifying attendance...'}
+                      </Text>
                     </View>
                   )}
 
-                  {!scanned && !loading && (
+                  {!scanned && !loading && !locationLoading && (
                     <View style={styles.viewfinderContainer}>
                       <View style={styles.viewfinderSquare} />
-                      <Text style={styles.viewfinderHelper}>Place the dynamic Teacher QR inside the square</Text>
+                      <Text style={styles.viewfinderHelper}>Point camera at the teacher's QR code</Text>
                     </View>
                   )}
                 </View>
@@ -786,5 +926,39 @@ const styles = StyleSheet.create({
   detailValue: { fontSize: 13, fontWeight: 'bold' },
   
   logoutBtn: { flexDirection: 'row', backgroundColor: '#EF4444', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 40 },
-  logoutBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 }
+  logoutBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+
+  // ── Student Identity Card (Scan Tab) ──
+  studentIdentityCard: { borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1 },
+  identityRow: { flexDirection: 'row', alignItems: 'center' },
+  identityAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#3B82F6', justifyContent: 'center', alignItems: 'center' },
+  identityAvatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  identityName: { fontSize: 15, fontWeight: 'bold' },
+  identityRoll: { fontSize: 12, color: '#3B82F6', fontWeight: '600', marginTop: 2 },
+  identityCourse: { fontSize: 11, color: '#666', marginTop: 1 },
+  identityBadge: { padding: 8, backgroundColor: 'rgba(16,185,129,0.1)', borderRadius: 20, marginLeft: 'auto' },
+
+  // ── Real-Time GPS Status Card ──
+  gpsStatusCard: { borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1 },
+  gpsPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, marginLeft: 'auto' },
+  gpsDot: { width: 7, height: 7, borderRadius: 4, marginRight: 5 },
+  gpsPillText: { fontSize: 10, fontWeight: 'bold' },
+  gpsWaiting: { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 6 },
+  coordsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, marginBottom: 6 },
+  coordBlock: { flex: 1, alignItems: 'center' },
+  coordLabel: { fontSize: 10, color: '#666', fontWeight: '600', marginBottom: 2 },
+  coordValue: { fontSize: 13, fontWeight: 'bold' },
+  geofenceNote: { fontSize: 11, marginTop: 8 },
+
+  // ── Scan Result Student Row ──
+  resultStudentRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: 12, padding: 12, width: '100%' },
+  resultAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#3B82F6', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  resultAvatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  resultStudentName: { fontSize: 14, fontWeight: 'bold' },
+  resultStudentRoll: { fontSize: 12, color: '#3B82F6', fontWeight: '600', marginTop: 2 },
+
+  // ── Distance Pill (Result) ──
+  distancePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(59,130,246,0.1)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 22 },
+  distancePillText: { color: '#3B82F6', fontWeight: 'bold', fontSize: 12, marginLeft: 5 },
 });
+

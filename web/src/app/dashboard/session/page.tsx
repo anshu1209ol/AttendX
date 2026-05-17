@@ -339,7 +339,9 @@ export default function SessionPage() {
                         <p className="text-xs font-medium">Class terminal initialized.<br/>Awaiting student signals...</p>
                       </div>
                     ) : (
-                      students.map((student, i) => (
+                      students.map((student, i) => {
+                        if (!student) return null; // guard against undefined entries
+                        return (
                         <motion.div 
                           key={student.roll} 
                           initial={{ opacity: 0, y: 15 }}
@@ -348,7 +350,7 @@ export default function SessionPage() {
                         >
                           <div className="flex items-center gap-2.5">
                             <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary">
-                              {student.avatar}
+                              {student.avatar ?? '??'}
                             </div>
                             <div>
                               <h5 className="text-xs font-bold text-foreground leading-none mb-1">{student.name}</h5>
@@ -362,7 +364,8 @@ export default function SessionPage() {
                             <span className="text-[9px] text-muted-foreground font-mono block">±{student.accuracy}</span>
                           </div>
                         </motion.div>
-                      ))
+                        );
+                      })
                     )}
                   </AnimatePresence>
                 </CardContent>

@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "AttendX needs your location to verify you are inside the classroom before marking attendance.",
+        "NSLocationAlwaysUsageDescription": "AttendX needs your location to verify attendance."
+      }
     },
     "android": {
       "package": "com.anshulsikarwar.attendx",
@@ -22,13 +26,23 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "AttendX needs your GPS location to confirm you are inside the classroom before marking attendance."
+        }
+      ],
       [
         "expo-build-properties",
         {
